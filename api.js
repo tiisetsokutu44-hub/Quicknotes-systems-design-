@@ -7,12 +7,14 @@ const noteForm = document.getElementById("note-form");
 const titleInput = document.getElementById("title-input");
 const bodyInput = document.getElementById("body-input");
 const submitButton = document.getElementById("submit-btn");
+
+// Display status messages.
 function showStatus(message, type = "") {
   statusMessage.textContent = message;
   statusMessage.className = type;
 }
 
-// Reusable request helper: checks HTTP errors and returns the response.
+// Reusable function for HTTP requests.
 async function request(url, options = {}) {
   const response = await fetch(url, options);
 
@@ -20,7 +22,7 @@ async function request(url, options = {}) {
     throw new Error(`Request failed with status ${response.status}`);
   }
 
-  // DELETE responses may have no JSON body.
+  // Some DELETE requests return no response body.
   if (response.status === 204) {
     return { data: null, status: response.status };
   }
@@ -29,6 +31,7 @@ async function request(url, options = {}) {
   return { data, status: response.status };
 }
 
+// Create a note element with a Delete button.
 function renderNote(note) {
   const item = document.createElement("li");
   item.className = "note";
@@ -37,25 +40,39 @@ function renderNote(note) {
   title.textContent = note.title;
 
   const body = document.createElement("p");
-  body.textContent = note.body;
+  body.textContent = note.body || "";
 
-  item.append(title, body);
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.textContent = "Delete";
+  deleteButton.className = "delete-btn";
+
+  deleteButton.addEventListener("click", () => {
+    deleteNote(note.id, item, deleteButton);
+  });
+
+  item.append(title, body, deleteButton);
+
   return item;
 }
 
+// Display an empty-state message.
 function showEmptyState() {
   const item = document.createElement("li");
   item.textContent = "No notes found. Create a note to get started.";
   item.className = "empty-state";
+
   notesList.replaceChildren(item);
 }
 
+// GET: Load notes from the API.
 async function loadNotes() {
   loadButton.disabled = true;
   showStatus("Loading notes...", "loading");
 
   try {
     const result = await request(`${API_URL}?_limit=10`);
+
     notesList.replaceChildren();
 
     if (result.data.length === 0) {
@@ -74,6 +91,7 @@ async function loadNotes() {
     );
   } catch (error) {
     console.error("Unable to load notes:", error);
+
     showStatus(
       "Sorry, we couldn't load your notes. Please check your connection and try again.",
       "error",
@@ -84,6 +102,8 @@ async function loadNotes() {
 }
 
 loadButton.addEventListener("click", loadNotes);
+
+// POST: Create a new note.
 async function createNote(event) {
   event.preventDefault();
 
@@ -119,6 +139,7 @@ async function createNote(event) {
     });
 
     const newNote = result.data;
+
     notesList.querySelector(".empty-state")?.remove();
     notesList.prepend(renderNote(newNote));
 
@@ -130,6 +151,7 @@ async function createNote(event) {
     noteForm.reset();
   } catch (error) {
     console.error("Unable to create note:", error);
+
     showStatus(
       "Sorry, we couldn't create your note. Please try again.",
       "error",
@@ -140,3 +162,34 @@ async function createNote(event) {
 }
 
 noteForm.addEventListener("submit", createNote);
+
+// DELETE: Delete a note from the displayed list.
+async function deleteNote(noteId, noteElement, deleteButton) {
+  deleteButton.disabled = true;
+  showStatus("Deleting note...", "loading");
+
+  try {
+    await request(`${API_URL}/${noteId}`, {
+      method: "DELETE",
+    });
+
+    // JSONPlaceholder simulates deletion but does not permanently
+    // save changes to its sample data.
+    noteElement.remove();
+
+    if (notesList.children.length === 0) {
+      showEmptyState();
+    }
+
+    showStatus(`Note ${noteId} deleted successfully.`, "success");
+  } catch (error) {
+    console.error("Unable to delete note:", error);
+
+    showStatus(
+      "Sorry, we couldn't delete this note. Please try again.",
+      "error",
+    );
+  } finally {
+    deleteButton.disabled = false;
+  }
+}
